@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -e
+
+# Reinstala se package.json/pnpm-lock.yaml mudaram no merge.
+CHANGED=$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD)
+if echo "$CHANGED" | grep -qE '(^|/)(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'; then
+  echo "→ dependências mudaram, rodando pnpm install --frozen-lockfile"
+  pnpm install --frozen-lockfile
+fi

@@ -1,0 +1,2 @@
+# Rotas que exigem assinatura ativa (além de autenticação).
+# Use o subscriptionLoader em src/router.tsx (descomente quando habilitar billing).

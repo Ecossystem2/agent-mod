@@ -1,0 +1,8 @@
+# Mappers Prisma vivem aqui, organizados por subdomínio:
+#   src/infra/database/prisma/mappers/<subdomain>/prisma-<entity>-mapper.ts
+#
+# Padrão:
+#   export class PrismaSubscriptionMapper {
+#     static toDomain(raw: SubscriptionPrisma): Subscription { ... }
+#     static toPersistence(sub: Subscription): SubscriptionPrismaInput { ... }
+#   }

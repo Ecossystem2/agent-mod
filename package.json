@@ -1,0 +1,56 @@
+{
+  "name": "template-nest-ddd",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint -- --fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test --",
+    "test:e2e": "turbo run test:e2e --",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,md}\" --ignore-path .gitignore",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "setup": "bash setup.sh",
+    "deploy": "bash deploy.sh",
+    "deploy:rebuild": "bash deploy.sh --rebuild",
+    "deploy:skip-seeds": "bash deploy.sh --skip-seeds",
+    "compose:down": "docker compose --env-file apps/api/.env --env-file apps/web/.env down",
+    "compose:logs": "docker compose --env-file apps/api/.env --env-file apps/web/.env logs -f",
+    "prepare": "git config core.hooksPath .husky || true"
+  },
+  "devDependencies": {
+    "@apps/eslint-config": "workspace:*",
+    "@apps/typescript-config": "workspace:*",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.9.16",
+    "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild@<0.25.0": ">=0.25.0",
+      "multer@<2.2.0": ">=2.2.0",
+      "qs@<6.15.2": ">=6.15.2",
+      "tmp@<0.2.6": ">=0.2.6",
+      "picomatch@<4.0.4": ">=4.0.4",
+      "lodash@<4.18.0": ">=4.18.0",
+      "@hono/node-server@<1.19.13": "1.19.14",
+      "vite@<6.4.3": ">=6.4.3 <7",
+      "ws@<8.21.0": ">=8.21.0",
+      "form-data@<4.0.6": ">=4.0.6",
+      "hono@<4.12.25": ">=4.12.25"
+    },
+    "auditConfig": {
+      "ignoreGhsas": ["GHSA-gv7w-rqvm-qjhr"]
+    }
+  }
+}

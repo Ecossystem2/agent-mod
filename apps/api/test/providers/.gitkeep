@@ -1,0 +1,8 @@
+# Fakes de providers vivem aqui:
+#   test/providers/fake-<provider>.ts
+#
+# Exemplo:
+#   export class FakeMailProvider extends MailProvider {
+#     sent: MailMessage[] = []
+#     async send(msg: MailMessage) { this.sent.push(msg) }
+#   }

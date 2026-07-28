@@ -1,0 +1,21 @@
+# Supressões do Trivy — cada entrada exige justificativa explícita.
+# Formato: https://trivy.dev/latest/docs/configuration/filtering/#trivyignoreyaml
+#
+# REVISAR: quando o vite for atualizado para uma versão que use esbuild >= 0.28.1.
+# vite 6 e 7 travam esbuild em < 0.28.1 (vite 7.3.5 = ^0.27.0); só vite 8+ resolve.
+# Ver a task de upgrade major do vite antes de remover esta entrada.
+
+vulnerabilities:
+  - id: GHSA-gv7w-rqvm-qjhr
+    purl: "pkg:npm/esbuild@0.25.12"
+    statement: >-
+      esbuild 0.25.12 entra APENAS como dependência transitiva do vite (build do
+      apps/web). O advisory é específico do MÓDULO DENO do esbuild (download do
+      binário em runtime sem verificação de integridade). Neste monorepo o esbuild
+      é consumido via npm/pnpm em Node: o binário vem das optionalDependencies
+      (@esbuild/<plataforma>) com hash de integridade no pnpm-lock.yaml, e o
+      caminho de download do Deno nunca é executado — o vetor não é alcançável.
+      A metade originada do tsx (esbuild 0.27.7) já foi corrigida via
+      tsx@^4.22.4 -> esbuild 0.28.1. Não há fix do lado do vite sem upgrade major
+      (6 -> 8); o override forçado quebra o build (incompatibilidade de target
+      esbuild 0.28 x vite 6). Revisar no upgrade do vite.

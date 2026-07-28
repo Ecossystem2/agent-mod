@@ -1,0 +1,13 @@
+# Presenters vivem aqui, organizados por subdomínio:
+#   src/infra/http/presenters/<subdomain>/<entity>-presenter.ts
+#
+# Padrão (estático, sem injeção):
+#   export class SubscriptionPresenter {
+#     static toHTTP(sub: Subscription) {
+#       return {
+#         id: sub.id.toString(),
+#         status: sub.status,
+#         renewsAt: sub.renewsAt?.toISOString(),
+#       }
+#     }
+#   }

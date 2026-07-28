@@ -1,0 +1,50 @@
+#!/usr/bin/env sh
+set -e
+
+# ------------------------------------------------------------------------------
+# 1) Bloqueia commits sem nada staged (evita `git commit -a` acidental)
+# ------------------------------------------------------------------------------
+if git diff --cached --quiet; then
+  echo "✗ pre-commit: nada staged. Use 'git add <arquivo>' antes de commitar (sem 'git commit -a')."
+  exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# 2) Bloqueia .env / arquivos de secret
+# ------------------------------------------------------------------------------
+BLOCKED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)\.env(\..*)?$|(^|/)secrets?(\..*)?$|(^|/)credentials\..*$' | grep -v '\.env\.example$' || true)
+if [ -n "$BLOCKED" ]; then
+  echo "✗ pre-commit: arquivos sensíveis detectados — não commitar:"
+  echo "$BLOCKED" | sed 's/^/   - /'
+  echo "Adicione ao .gitignore ou remova com: git restore --staged <arquivo>"
+  exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# 3) Bloqueia chaves comuns no diff (heurística básica)
+# ------------------------------------------------------------------------------
+SECRET_PATTERNS='(AKIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY-----|sk_live_[0-9a-zA-Z]{24,}|ghp_[0-9a-zA-Z]{36}|xox[abprs]-[0-9a-zA-Z-]+)'
+LEAKED=$(git diff --cached -U0 -- ':!pnpm-lock.yaml' ':!*.lock' | grep -E "$SECRET_PATTERNS" || true)
+if [ -n "$LEAKED" ]; then
+  echo "✗ pre-commit: padrão de secret detectado no diff. Revise antes de commitar."
+  exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# É SÓ ISSO. O commit é barato de propósito.
+# ------------------------------------------------------------------------------
+# Aqui rodam apenas checagens instantâneas e IRREVERSÍVEIS na prática: secret
+# vazado num commit fica no histórico mesmo depois de removido — por isso este
+# gate existe e é o único que não dá pra deixar pro push.
+#
+# Lint/typecheck/test/build NÃO rodam aqui: rodam 1× no pre-push (`.husky/pre-push`,
+# uma invocação do turbo com tudo em paralelo) e no CI. Motivo é medido, não
+# preferência: com lint+typecheck+test o hook custava ~82s POR COMMIT, e a regra de
+# commits granulares (máx 4 arquivos) multiplicava isso — uma task de 7 commits
+# pagava ~10 min só de hook, pra checar de novo o que o push ia checar mesmo.
+#
+# O trade-off é explícito: dá pra COMMITAR algo quebrado localmente, mas não dá
+# pra dar PUSH. Commit é local e barato de amend/rebase; push é a fronteira real
+# (o código sai da máquina). Errar pra "commit rápido" custa um amend; errar pra
+# "commit lento" custa 10 min em toda task.
+echo "✓ pre-commit OK (gate completo roda no pre-push)"

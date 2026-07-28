@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Canvas slate frio — cards brancos sobem sobre ele */
+    --background: 220 24% 96%;
+    --foreground: 233 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 233 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 233 30% 12%;
+
+    /* Marca: azul. Trocar a primary aqui rebranda o app inteiro. */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 30% 92%;
+    --secondary-foreground: 235 40% 21%;
+
+    --muted: 220 22% 92%;
+    --muted-foreground: 233 14% 40%;
+
+    /* accent = tint azul (hover/seleção mostram a marca, não cinza morto) */
+    --accent: 217 91% 95%;
+    --accent-foreground: 217 60% 30%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 60% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 12%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 220 16% 86%;
+    --input: 220 16% 86%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.625rem;
+
+    /* Sidebar navy escura sobre canvas claro (padrão dashboard) */
+    --sidebar-background: 235 47% 18%;
+    --sidebar-foreground: 220 20% 92%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 235 35% 24%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 235 30% 26%;
+    --sidebar-ring: 217 91% 60%;
+  }
+
+  .dark {
+    --background: 233 30% 8%;
+    --foreground: 0 0% 96%;
+
+    --card: 233 27% 11%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 233 27% 11%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 233 25% 18%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 233 22% 16%;
+    --muted-foreground: 220 14% 70%;
+
+    --accent: 217 40% 22%;
+    --accent-foreground: 0 0% 96%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 55% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 38 92% 10%;
+
+    --info: 199 89% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 233 20% 20%;
+    --input: 233 20% 20%;
+    --ring: 217 91% 60%;
+
+    --sidebar-background: 235 35% 10%;
+    --sidebar-foreground: 220 20% 88%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 235 28% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 235 25% 18%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+  }
+}

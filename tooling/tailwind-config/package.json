@@ -1,0 +1,14 @@
+{
+  "name": "@apps/tailwind-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./preset.cjs",
+  "files": ["preset.cjs", "preset.d.cts", "globals.css"],
+  "dependencies": {
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

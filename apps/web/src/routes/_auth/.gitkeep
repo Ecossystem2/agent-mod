@@ -1,0 +1,3 @@
+# Rotas públicas (sign-in, sign-up, forgot-password) vivem aqui.
+# Cada rota = um arquivo .tsx exportando default Component + loader/action opcionais (data router).
+# Registre em src/router.tsx.

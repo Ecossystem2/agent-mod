@@ -1,0 +1,12 @@
+# Repositórios abstratos do domínio vivem aqui, organizados por subdomínio:
+#   src/domain/application/repositories/<subdomain>/<entity>-repository.ts
+#
+# Exemplo (crie quando adicionar o primeiro subdomínio):
+#   src/domain/application/repositories/billing/subscription-repository.ts
+#
+# Padrão:
+#   export abstract class SubscriptionRepository {
+#     abstract findById(id: string): Promise<Subscription | null>
+#     abstract create(sub: Subscription): Promise<void>
+#     ...
+#   }

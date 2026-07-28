@@ -1,0 +1,62 @@
+name: apps-blue
+
+# =============================================================================
+# docker-compose.blue.yml — cor BLUE (api + web).
+#
+# Postgres/Redis NÃO vivem aqui — vêm do docker-compose.shared.yml e são
+# alcançados pela rede externa `apps-net` (nomes de serviço `postgres`/`redis`).
+#
+# As imagens api+web são publicadas pelo CI em registry e puxadas pelo deploy:
+#   COMPOSE_PROJECT_NAME=apps-blue \
+#   docker compose --env-file apps/api/.env \
+#     -f docker-compose.shared.yml -f docker-compose.blue.yml pull api web
+#   COMPOSE_PROJECT_NAME=apps-blue \
+#   docker compose --env-file apps/api/.env \
+#     -f docker-compose.shared.yml -f docker-compose.blue.yml up -d --no-build api web
+#
+# Portas host da cor BLUE: API=${BLUE_API_PORT:-3341}, WEB=${BLUE_WEB_PORT:-8081}.
+# O nginx do host aponta pra cor ATIVA (ver infra/nginx/).
+# =============================================================================
+
+services:
+  api:
+    image: ${API_IMAGE:-apps-api}:${IMAGE_TAG:?IMAGE_TAG obrigatório (pinar SHA/versão; latest não é rollback-safe)}
+    container_name: apps-blue-api
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env
+    # NÃO migrar no boot: com banco compartilhado entre as cores, migrar a cada
+    # boot faz a cor nova migrar o schema enquanto a cor antiga ainda serve →
+    # migration não-backward-compatible quebra a cor ativa. Migrations rodam UMA
+    # vez, como one-off, antes de subir a cor nova:
+    #   docker compose --env-file apps/api/.env -f docker-compose.shared.yml \
+    #     -f docker-compose.blue.yml run --rm api pnpm exec prisma migrate deploy
+    command: ["node", "dist/infra/main.js"]
+    ports:
+      - "${BLUE_API_PORT:-3341}:3333"
+    networks:
+      - apps-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3333/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 8
+      start_period: 20s
+
+  web:
+    image: ${WEB_IMAGE:-apps-web}:${IMAGE_TAG:?IMAGE_TAG obrigatório (pinar SHA/versão; latest não é rollback-safe)}
+    container_name: apps-blue-web
+    restart: unless-stopped
+    # O container web (nginx-unprivileged) escuta em 8080, não 80. Mapear :80 aqui
+    # deixa o frontend com connection-refused/502 em todo deploy blue/green.
+    ports:
+      - "${BLUE_WEB_PORT:-8081}:8080"
+    networks:
+      - apps-net
+    depends_on:
+      - api
+
+networks:
+  apps-net:
+    name: apps-net
+    external: true

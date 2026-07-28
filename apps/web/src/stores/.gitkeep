@@ -1,0 +1,7 @@
+# Stores Zustand vivem aqui — APENAS pra client state (UI state global).
+#
+# Exemplos válidos:
+#   - sidebar-store.ts (sidebar collapsed?)
+#   - filters-store.ts (filtros persistidos entre rotas)
+#
+# NÃO duplique server state aqui — TanStack Query é a fonte da verdade pra dados de API.

@@ -1,0 +1,330 @@
+name: Deploy Production (Blue-Green)
+
+# Produção = blue-green com zero-downtime, orquestrado pelos scripts em
+# infra/deploy/. Gatilhos:
+#   - tag `vX.Y.Z`           → build/publish no GHCR + deploy automático
+#   - workflow_dispatch      → deploy manual OU rollback manual (input `action`)
+#
+# O build do release acontece no GitHub-hosted runner e publica imagens no GHCR.
+# Os runners self-hosted da VPS apenas fazem pull + migrate + switch.
+#
+# Pré-requisitos no runner de produção:
+#   - docker + docker compose v2
+#   - nginx do host instalado (confs em sites-available, symlink active.conf)
+#   - apps/api/.env, apps/web/.env e deploy.env preenchidos
+#   - acesso de leitura ao GHCR via GITHUB_TOKEN do workflow
+#   - infra/backup configurado (B2 + restic) para o backup pré-deploy
+#   - usuário do runner com sudo NOPASSWD pra nginx -t / -s reload e symlink
+# Ver docs/infra/ci-cd-setup.md (runbook).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'deploy (cor idle) ou rollback (cor anterior)'
+        type: choice
+        default: deploy
+        options: [deploy, rollback]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build-images:
+    name: Build and push release images
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolver namespace do registry
+        id: registry
+        run: |
+          owner_lc="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "prefix=ghcr.io/${owner_lc}/boilarplate" >> "$GITHUB_OUTPUT"
+
+      - name: Login no GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push api
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.prefix }}-api:${{ github.ref_name }}
+            ${{ steps.registry.outputs.prefix }}-api:${{ github.sha }}
+            ${{ steps.registry.outputs.prefix }}-api:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=production-api
+          cache-to: type=gha,mode=max,scope=production-api
+
+      - name: Build and push web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.prefix }}-web:${{ github.ref_name }}
+            ${{ steps.registry.outputs.prefix }}-web:${{ github.sha }}
+            ${{ steps.registry.outputs.prefix }}-web:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=production-web
+          cache-to: type=gha,mode=max,scope=production-web
+
+  deploy:
+    name: Blue-Green deploy
+    if: ${{ github.event_name == 'push' }}
+    runs-on: [self-hosted, production]
+    needs: build-images
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolver namespace do registry
+        id: registry
+        run: |
+          owner_lc="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "api_image=ghcr.io/${owner_lc}/boilarplate-api" >> "$GITHUB_OUTPUT"
+          echo "web_image=ghcr.io/${owner_lc}/boilarplate-web" >> "$GITHUB_OUTPUT"
+
+      - name: Login no GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sanity — envs e nginx
+        run: |
+          test -f apps/api/.env  || { echo "::error::apps/api/.env ausente"; exit 1; }
+          test -f apps/web/.env  || { echo "::error::apps/web/.env ausente"; exit 1; }
+          command -v docker >/dev/null || { echo "::error::docker ausente"; exit 1; }
+
+      - name: Resolver tag
+        id: tag
+        run: echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Backup pré-deploy (se necessário)
+        run: |
+          set -euo pipefail
+          source infra/deploy/lib.sh
+          load_deploy_env
+          status_file="$BACKUP_STATUS_FILE"
+          max_age_hours="$BACKUP_MAX_AGE_HOURS"
+          max_age_seconds="$((max_age_hours * 3600))"
+          now="$(date +%s)"
+          should_run=1
+
+          if [ -f "$status_file" ]; then
+            last_success="$(cat "$status_file" 2>/dev/null || echo 0)"
+            last_success="${last_success:-0}"
+            if [ "$last_success" -gt 0 ]; then
+              age="$((now - last_success))"
+              if [ "$age" -lt "$max_age_seconds" ]; then
+                should_run=0
+                echo "backup pré-deploy recente encontrado (${age}s < ${max_age_seconds}s); pulando"
+              fi
+            fi
+          fi
+
+          if [ "$should_run" -eq 1 ]; then
+            start="$(date +%s)"
+            sudo --preserve-env=PATH,BACKUP_STATUS_FILE bash infra/backup/backup-restic.sh
+            elapsed="$(( $(date +%s) - start ))"
+            echo "backup pré-deploy concluído em ${elapsed}s"
+          fi
+
+      - name: Descobrir cor ativa / idle
+        id: colors
+        run: |
+          ACTIVE="$(infra/deploy/active-color.sh || true)"
+          IDLE="$(infra/deploy/active-color.sh --idle)"
+          echo "active=$ACTIVE" >> "$GITHUB_OUTPUT"
+          echo "idle=$IDLE"     >> "$GITHUB_OUTPUT"
+          echo "ativa='${ACTIVE:-<nenhuma>}', idle='$IDLE'"
+
+      # Build artefatos já publicados no GHCR; aqui a cor idle só faz pull + up + migrate.
+      - name: Deploy na cor idle
+        env:
+          API_IMAGE: ${{ steps.registry.outputs.api_image }}
+          WEB_IMAGE: ${{ steps.registry.outputs.web_image }}
+        run: |
+          start="$(date +%s)"
+          sudo --preserve-env=PATH,API_IMAGE,WEB_IMAGE,IMAGE_TAG,GITHUB_REPOSITORY_OWNER bash infra/deploy/deploy-color.sh \
+            "${{ steps.colors.outputs.idle }}" "${{ steps.tag.outputs.value }}"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "deploy da cor idle concluído em ${elapsed}s"
+
+      # Vira o symlink do nginx pra cor idle (agora saudável) e recarrega.
+      - name: Switch de tráfego
+        run: |
+          start="$(date +%s)"
+          sudo bash infra/deploy/switch.sh "${{ steps.colors.outputs.idle }}"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "switch de tráfego concluído em ${elapsed}s"
+
+      # Verifica saúde pelo proxy público (porta 80 do host) após o switch.
+      - name: Verificar pós-switch
+        run: |
+          start="$(date +%s)"
+          source infra/deploy/lib.sh
+          load_deploy_env
+          health_check "http://localhost/api/health" \
+            "${POST_SWITCH_HEALTHCHECK_RETRIES:-20}" \
+            "${POST_SWITCH_HEALTHCHECK_INTERVAL:-1}"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "verificação pós-switch concluída em ${elapsed}s"
+
+      # Só após confirmar a nova cor: para a cor antiga (libera recursos).
+      - name: Parar cor antiga
+        if: ${{ steps.colors.outputs.active != '' }}
+        run: |
+          start="$(date +%s)"
+          COMPOSE_PROJECT_NAME="apps-${{ steps.colors.outputs.active }}" \
+            docker compose --env-file apps/api/.env \
+            -f "docker-compose.${{ steps.colors.outputs.active }}.yml" \
+            stop api web
+          elapsed="$(( $(date +%s) - start ))"
+          echo "parada da cor antiga concluída em ${elapsed}s"
+
+  deploy-manual:
+    name: Manual deploy
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.action == 'deploy' }}
+    runs-on: [self-hosted, production]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolver namespace do registry
+        id: registry
+        run: |
+          owner_lc="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "api_image=ghcr.io/${owner_lc}/boilarplate-api" >> "$GITHUB_OUTPUT"
+          echo "web_image=ghcr.io/${owner_lc}/boilarplate-web" >> "$GITHUB_OUTPUT"
+
+      - name: Login no GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sanity — envs e nginx
+        run: |
+          test -f apps/api/.env  || { echo "::error::apps/api/.env ausente"; exit 1; }
+          test -f apps/web/.env  || { echo "::error::apps/web/.env ausente"; exit 1; }
+          command -v docker >/dev/null || { echo "::error::docker ausente"; exit 1; }
+
+      - name: Resolver tag
+        id: tag
+        run: |
+          git fetch --tags --force --prune
+          echo "value=$(git describe --tags --abbrev=0 2>/dev/null || echo latest)" >> "$GITHUB_OUTPUT"
+
+      - name: Backup pré-deploy (se necessário)
+        run: |
+          set -euo pipefail
+          source infra/deploy/lib.sh
+          load_deploy_env
+          status_file="$BACKUP_STATUS_FILE"
+          max_age_hours="$BACKUP_MAX_AGE_HOURS"
+          max_age_seconds="$((max_age_hours * 3600))"
+          now="$(date +%s)"
+          should_run=1
+
+          if [ -f "$status_file" ]; then
+            last_success="$(cat "$status_file" 2>/dev/null || echo 0)"
+            last_success="${last_success:-0}"
+            if [ "$last_success" -gt 0 ]; then
+              age="$((now - last_success))"
+              if [ "$age" -lt "$max_age_seconds" ]; then
+                should_run=0
+                echo "backup pré-deploy recente encontrado (${age}s < ${max_age_seconds}s); pulando"
+              fi
+            fi
+          fi
+
+          if [ "$should_run" -eq 1 ]; then
+            start="$(date +%s)"
+            sudo --preserve-env=PATH,BACKUP_STATUS_FILE bash infra/backup/backup-restic.sh
+            elapsed="$(( $(date +%s) - start ))"
+            echo "backup pré-deploy concluído em ${elapsed}s"
+          fi
+
+      - name: Descobrir cor ativa / idle
+        id: colors
+        run: |
+          ACTIVE="$(infra/deploy/active-color.sh || true)"
+          IDLE="$(infra/deploy/active-color.sh --idle)"
+          echo "active=$ACTIVE" >> "$GITHUB_OUTPUT"
+          echo "idle=$IDLE"     >> "$GITHUB_OUTPUT"
+          echo "ativa='${ACTIVE:-<nenhuma>}', idle='$IDLE'"
+
+      - name: Deploy na cor idle
+        env:
+          API_IMAGE: ${{ steps.registry.outputs.api_image }}
+          WEB_IMAGE: ${{ steps.registry.outputs.web_image }}
+        run: |
+          start="$(date +%s)"
+          sudo --preserve-env=PATH,API_IMAGE,WEB_IMAGE,IMAGE_TAG,GITHUB_REPOSITORY_OWNER bash infra/deploy/deploy-color.sh \
+            "${{ steps.colors.outputs.idle }}" "${{ steps.tag.outputs.value }}"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "deploy da cor idle concluído em ${elapsed}s"
+
+      - name: Switch de tráfego
+        run: |
+          start="$(date +%s)"
+          sudo bash infra/deploy/switch.sh "${{ steps.colors.outputs.idle }}"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "switch de tráfego concluído em ${elapsed}s"
+
+      - name: Verificar pós-switch
+        run: |
+          start="$(date +%s)"
+          source infra/deploy/lib.sh
+          load_deploy_env
+          health_check "http://localhost/api/health" \
+            "${POST_SWITCH_HEALTHCHECK_RETRIES:-20}" \
+            "${POST_SWITCH_HEALTHCHECK_INTERVAL:-1}"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "verificação pós-switch concluída em ${elapsed}s"
+
+      - name: Parar cor antiga
+        if: ${{ steps.colors.outputs.active != '' }}
+        run: |
+          start="$(date +%s)"
+          COMPOSE_PROJECT_NAME="apps-${{ steps.colors.outputs.active }}" \
+            docker compose --env-file apps/api/.env \
+            -f "docker-compose.${{ steps.colors.outputs.active }}.yml" \
+            stop api web
+          elapsed="$(( $(date +%s) - start ))"
+          echo "parada da cor antiga concluída em ${elapsed}s"
+
+  rollback:
+    name: Rollback manual
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.action == 'rollback' }}
+    runs-on: [self-hosted, production]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reverter symlink pra cor anterior
+        run: sudo bash infra/deploy/rollback.sh

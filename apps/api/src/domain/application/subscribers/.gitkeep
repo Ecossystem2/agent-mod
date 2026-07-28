@@ -1,0 +1,12 @@
+# Event handlers (on-*.ts) vivem aqui.
+#
+# Exemplo:
+#   src/domain/application/subscribers/billing/on-subscription-created.ts
+#
+#   @Injectable()
+#   export class OnSubscriptionCreated {
+#     @OnEvent(SubscriptionCreatedEvent.name)
+#     async handle(event: SubscriptionCreatedEvent) { ... }
+#   }
+#
+# Registre os providers no módulo correspondente em infra/.

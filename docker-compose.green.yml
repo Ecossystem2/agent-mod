@@ -1,0 +1,52 @@
+name: apps-green
+
+# =============================================================================
+# docker-compose.green.yml — cor GREEN (api + web).
+#
+# Idêntico ao blue, exceto portas host, container_name e project name. Ver
+# docker-compose.blue.yml para o racional e o comando de pull/up.
+#
+#   COMPOSE_PROJECT_NAME=apps-green \
+#   docker compose --env-file apps/api/.env \
+#     -f docker-compose.shared.yml -f docker-compose.green.yml up -d api web
+#
+# Portas host da cor GREEN: API=${GREEN_API_PORT:-3342}, WEB=${GREEN_WEB_PORT:-8082}.
+# =============================================================================
+
+services:
+  api:
+    image: ${API_IMAGE:-apps-api}:${IMAGE_TAG:?IMAGE_TAG obrigatório (pinar SHA/versão; latest não é rollback-safe)}
+    container_name: apps-green-api
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env
+    # NÃO migrar no boot (banco compartilhado entre cores) — migrations rodam UMA
+    # vez como one-off antes de subir a cor nova. Ver docker-compose.blue.yml.
+    command: ["node", "dist/infra/main.js"]
+    ports:
+      - "${GREEN_API_PORT:-3342}:3333"
+    networks:
+      - apps-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3333/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 8
+      start_period: 20s
+
+  web:
+    image: ${WEB_IMAGE:-apps-web}:${IMAGE_TAG:?IMAGE_TAG obrigatório (pinar SHA/versão; latest não é rollback-safe)}
+    container_name: apps-green-web
+    restart: unless-stopped
+    # Container web escuta em 8080, não 80 (ver docker-compose.blue.yml).
+    ports:
+      - "${GREEN_WEB_PORT:-8082}:8080"
+    networks:
+      - apps-net
+    depends_on:
+      - api
+
+networks:
+  apps-net:
+    name: apps-net
+    external: true

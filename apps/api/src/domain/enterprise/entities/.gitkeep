@@ -1,0 +1,8 @@
+# Entidades de domínio vivem aqui, organizadas por subdomínio:
+#   src/domain/enterprise/entities/<subdomain>/<entity>.ts
+#   src/domain/enterprise/entities/<subdomain>/value-objects/<vo>.ts
+#
+# Padrão:
+#   - extends Entity<Props> (ou AggregateRoot<Props> se dispara eventos)
+#   - construtor private, expor apenas `static create(props, id?)` e `static reconstitute(...)`
+#   - método `update()` que valida e mantém invariantes

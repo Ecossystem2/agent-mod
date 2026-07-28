@@ -1,0 +1,15 @@
+# Features vivem aqui (feature-first organization):
+#   src/features/<modulo>/
+#     ├── components/    componentes específicos da feature
+#     ├── hooks/         useCreateX, useListX (TanStack Query)
+#     ├── api/           cliente HTTP da feature (axios via @/lib/api-client)
+#     ├── schemas/       schemas Zod (formulários + validação)
+#     └── types/         tipos compartilhados internamente
+#
+# Exemplo:
+#   src/features/billing/
+#     ├── components/subscription-card.tsx
+#     ├── hooks/use-subscription.ts
+#     ├── api/get-subscription.ts
+#     ├── schemas/cancel-subscription-schema.ts
+#     └── types/subscription.ts

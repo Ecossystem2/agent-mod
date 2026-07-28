@@ -1,0 +1,9 @@
+# Eventos de domínio vivem aqui, organizados por subdomínio:
+#   src/domain/enterprise/events/<subdomain>/<event>.ts
+#
+# Padrão:
+#   export class OrderConfirmedEvent implements DomainEvent {
+#     readonly occurredAt = new Date()
+#     constructor(public readonly order: Order) {}
+#     getAggregateId() { return this.order.id }
+#   }

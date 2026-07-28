@@ -1,0 +1,11 @@
+# Use-cases vivem aqui, organizados por subdomínio e feature:
+#   src/domain/application/use-cases/<subdomain>/<feature>/<verb>-x-use-case.ts
+#   src/domain/application/use-cases/<subdomain>/<feature>/<verb>-x-use-case.spec.ts   ← spec ao lado
+#   src/domain/application/use-cases/<subdomain>/<feature>/services/                    ← orquestradores
+#   src/domain/application/use-cases/<subdomain>/<feature>/errors/                       ← erros do feature
+#
+# Padrão (estrito):
+#   - Use Case retorna Either<UseCaseError<...>, Result>
+#   - método público chama-se sempre `execute`
+#   - injeta repos + providers (abstract classes), nunca infra concreta
+#   - spec usa in-memory repository + factory makeX (camelCase)

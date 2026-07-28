@@ -1,0 +1,19 @@
+# Controllers vivem aqui, organizados por subdomínio + verbo:
+#   src/infra/http/controllers/<subdomain>/<feature>/<verb>-x.controller.ts
+#
+# Padrão:
+#   @Controller('subscriptions')
+#   export class CreateSubscriptionController {
+#     constructor(private readonly useCase: CreateSubscriptionUseCase) {}
+#
+#     @Post()
+#     @RequiresPermission('billing:write')
+#     async handle(
+#       @Body(new ZodValidationPipe(CreateSubscriptionSchema)) body: CreateSubscriptionDto,
+#       @CurrentUser() user: SessionUser,
+#     ) {
+#       const result = await this.useCase.execute({ ...body, userId: user.id })
+#       if (result.isLeft()) throw CustomHttpException.fromUseCaseError(result.value)
+#       return { data: SubscriptionPresenter.toHTTP(result.value.subscription) }
+#     }
+#   }

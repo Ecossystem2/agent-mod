@@ -1,0 +1,20 @@
+# =============================================================================
+# restic-backup.timer — agenda o backup diário às 03:00 (hora do host).
+#
+# RandomizedDelaySec espalha a carga (evita pico exato às 03:00); Persistent
+# roda o backup perdido se a VPS estava desligada no horário.
+#
+# Habilitar: sudo systemctl enable --now restic-backup.timer
+# Status:    systemctl list-timers restic-backup.timer
+# =============================================================================
+[Unit]
+Description=Dispara restic-backup.service diariamente às 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=900
+Persistent=true
+Unit=restic-backup.service
+
+[Install]
+WantedBy=timers.target

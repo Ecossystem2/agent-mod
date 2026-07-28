@@ -1,0 +1,4 @@
+# Hooks GLOBAIS (compartilhados entre features) vivem aqui:
+#   useDebounce.ts, useMediaQuery.ts, useClickOutside.ts, etc.
+#
+# Hooks ESPECÍFICOS de uma feature ficam em src/features/<modulo>/hooks/.

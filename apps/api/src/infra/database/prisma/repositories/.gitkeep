@@ -1,0 +1,11 @@
+# Repositórios Prisma (impl) vivem aqui, organizados por subdomínio:
+#   src/infra/database/prisma/repositories/<subdomain>/prisma-<entity>-repository.ts
+#
+# Estende a abstract class do domínio:
+#   @Injectable()
+#   export class PrismaSubscriptionRepository implements SubscriptionRepository {
+#     constructor(private prisma: PrismaService) {}
+#     async findById(id: string) { ... }
+#   }
+#
+# Bind no infra/database/database.module.ts.

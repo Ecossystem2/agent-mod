@@ -1,0 +1,21 @@
+# Build context é a raiz do monorepo — ignora coisa pesada/sensível
+node_modules
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+.git
+.env
+.env.*
+!.env.example
+!apps/*/.env.example
+**/.env
+**/.env.*
+!**/.env.example
+.vscode
+.idea
+*.log
+.claude/tasks/PAUSED
+.claude/tasks/DONE
+.analysis
+docs/_internal

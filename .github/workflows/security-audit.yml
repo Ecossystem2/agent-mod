@@ -1,0 +1,42 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-audit
+  cancel-in-progress: false
+
+jobs:
+  audit-production-deps:
+    name: Audit production dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Antes: `pnpm audit --prod ... --ignore-registry-errors`. O npm aposentou o
+      # endpoint que o `pnpm audit` consulta (410), e o `--ignore-registry-errors`
+      # engolia justamente esse erro — o job ficava VERDE auditando NADA. Gate de
+      # segurança que reporta sucesso sem verificar é pior que gate nenhum: dá
+      # falsa confiança. Trivy lê o `pnpm-lock.yaml` com base própria.
+      - name: Trivy — vulnerabilidades das dependências (pnpm-lock.yaml)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo aquasec/trivy:0.65.0             fs .             --scanners vuln             --severity HIGH,CRITICAL             --ignorefile .trivyignore.yaml             --exit-code 1
+
+  trivy-config:
+    name: Trivy IaC/Dockerfile misconfig scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Escaneia Dockerfiles + docker-compose*.yml por misconfig (porta exposta em
+      # 0.0.0.0, imagem sem USER, tag mutável, etc). `pnpm audit` cobre deps; isto
+      # cobre infra-as-code, que dep audit não vê.
+      - name: Trivy config scan
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo aquasec/trivy:0.65.0             config .             --config trivy.yaml             --severity HIGH,CRITICAL             --exit-code 1

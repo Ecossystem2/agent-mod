@@ -1,0 +1,2 @@
+# Rotas autenticadas vivem aqui.
+# O guard fica no loader em src/router.tsx (privateLoader) — não precisa repetir em cada rota.

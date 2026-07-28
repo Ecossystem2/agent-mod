@@ -1,0 +1,279 @@
+name: CI
+
+on:
+  # SÓ as branches de integração. Antes era `branches-ignore: [gh-pages]`, que
+  # casava com TODA branch — então um push numa branch de PR disparava DOIS runs
+  # completos (um por `push`, outro por `pull_request`), dobrando fila e custo.
+  # O `concurrency` abaixo não dedupe isso: os refs são diferentes
+  # (`refs/heads/x` vs `refs/pull/N/merge`), então são grupos distintos.
+  # Branch de feature continua coberta — pelo run do PR dela.
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+# Cancela runs antigos do mesmo ref quando um novo push chega.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9.15.0'
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+jobs:
+  quality:
+    name: ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [lint, typecheck, build]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @apps/api exec prisma generate
+
+      - name: Run ${{ matrix.task }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pnpm turbo run ${{ matrix.task }} --affected
+          else
+            pnpm turbo run ${{ matrix.task }}
+          fi
+
+  test-unit:
+    name: test-unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @apps/api exec prisma generate
+
+      - name: Unit tests + coverage (100% gate)
+        run: |
+          pnpm --filter @apps/api test:cov
+          pnpm --filter @apps/web test:cov
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # `pnpm audit` NÃO é usado: ele consulta o endpoint
+      # `/-/npm/v1/security/audits`, que o npm APOSENTOU (responde 410). Não é
+      # questão de versão — pnpm 9 e 10 batem no mesmo endpoint. As alternativas
+      # eram mascarar (`--ignore-registry-errors`, que faz o job passar verde sem
+      # auditar nada — gate falso) ou trocar de ferramenta. Trivy lê o
+      # `pnpm-lock.yaml` direto, com base de vulnerabilidades própria.
+      # Imagem oficial em vez do `trivy-action`: o install.sh da action baixa o
+      # binário do GitHub Releases e falhava aqui (acha a tag e morre em 0.3s).
+      # A imagem é pinada, determinística e o output aparece direto no log.
+      - name: Trivy — vulnerabilidades das dependências (pnpm-lock.yaml)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo aquasec/trivy:0.65.0 \
+            fs . \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignorefile .trivyignore.yaml \
+            --exit-code 1
+
+  e2e-scope:
+    name: e2e-scope
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect e2e scope
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")"
+          if printf '%s\n' "$files" | grep -Eq '^(apps/api/|packages/(queue|types|utils|observability|ui)/|infra/|docker-compose.*\.yml$|deploy\.env\.example$|pnpm-lock\.yaml$|package\.json$|tooling/)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test-e2e:
+    name: test-e2e
+    runs-on: ubuntu-latest
+    needs: [e2e-scope]
+    if: ${{ needs.e2e-scope.outputs.run == 'true' }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: template_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/template_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      AUTH_SECRET: ci-auth-secret-at-least-32-bytes-long!!
+      AUTH_BASE_URL: http://localhost:3333
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @apps/api exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm --filter @apps/api prisma:migrate:deploy
+
+      # `test:e2e:cov`, não `test:e2e`: o `coverage.exclude` do unit dispensa os
+      # repositórios Prisma alegando "coberto por e2e". Rodar e2e SEM --coverage
+      # deixa essa alegação sem verificação nenhuma — repo com zero cobertura
+      # passaria no gate de 100%. Aqui a promessa é cobrada.
+      - name: E2E tests + coverage dos repositórios (100% gate)
+        run: pnpm --filter @apps/api test:e2e:cov
+
+  smoke:
+    name: smoke (docker boot + health + seed)
+    runs-on: ubuntu-latest
+    needs: [e2e-scope]
+    if: ${{ needs.e2e-scope.outputs.run == 'true' }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: template_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # A imagem real de produção (multi-stage) — pega falhas que só aparecem no
+      # runtime buildado: dep transitiva ausente (express), wildcard sem nome
+      # (path-to-regexp v8), health fora/dentro do prefixo. `tsc`/`vitest` NÃO
+      # pegam nenhuma delas. Este job é o backstop de boot.
+      - name: Build imagem de produção da API
+        run: docker build -f apps/api/Dockerfile -t api-smoke .
+
+      - name: Boot do container (migra + sobe, como no deploy real)
+        run: |
+          docker run -d --name api-smoke --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_URL="postgresql://postgres:postgres@localhost:5432/template_smoke?schema=public" \
+            -e REDIS_URL="redis://localhost:6379" \
+            -e AUTH_SECRET="ci-smoke-secret-at-least-32-bytes-long!!" \
+            -e AUTH_BASE_URL="http://localhost:3333" \
+            -e SECURE_COOKIES=true \
+            -e AUTH_TRUSTED_ORIGINS="http://localhost:3333" \
+            -e CORS_ALLOWED_ORIGINS="http://localhost:3333" \
+            api-smoke
+
+      - name: Espera GET /health = 200
+        run: |
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3333/health; then
+              echo ""; echo "→ /health OK na tentativa $i"; exit 0
+            fi
+            sleep 2
+          done
+          echo "✗ /health não respondeu 200 a tempo"; exit 1
+
+      - name: Smoke do seed (adapter Prisma 7)
+        run: docker exec api-smoke sh -c "pnpm exec tsx prisma/seed.ts"
+
+      - name: Logs do container (sempre)
+        if: always()
+        run: docker logs api-smoke || true

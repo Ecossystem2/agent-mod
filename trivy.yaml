@@ -1,0 +1,17 @@
+# Config do Trivy para o scan de IaC/Dockerfile no CI (security-audit.yml).
+# Falha em HIGH/CRITICAL. Suprima falso-positivo aqui (com justificativa), nunca
+# afrouxando a severidade global.
+scan:
+  scanners:
+    - misconfig
+    - secret
+
+misconfiguration:
+  # Ignora achados dos arquivos de exemplo/opcionais que não vão pra produção.
+  # Adicione IDs de check justificados aqui conforme aparecerem, ex:
+  #   AVD-DS-0002  # non-root: já tratado (USER node / USER nginx)
+  exclude-downloaded-modules: true
+
+severity:
+  - HIGH
+  - CRITICAL

@@ -1,0 +1,15 @@
+{
+  "extends": "@apps/typescript-config/nest.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@test/*": ["./test/*"]
+    },
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node", "vitest/globals", "react", "react-dom"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.e2e-spec.ts"]
+}

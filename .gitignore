@@ -1,0 +1,60 @@
+# dependencies
+node_modules
+.pnpm-store/
+
+# build outputs
+dist/
+build/
+out/
+.next/
+.turbo/
+coverage/
+coverage-e2e/
+*.tsbuildinfo
+
+# env (never commit real envs — only .env.example tracked)
+.env
+.env.*
+!.env.example
+!apps/*/.env.example
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# test artifacts
+*.lcov
+.nyc_output/
+
+# prisma
+apps/api/prisma/migrations/dev.db*
+
+# deploy gerado por setup.sh (specifico do ambiente — não versionar)
+Caddyfile
+docker-compose.caddy.yml
+*.bak
+
+# storage (driver=disk grava aqui — uploads runtime, fora do versionamento)
+apps/api/uploads/
+uploads/
+
+# claude tasks: CURRENT_TASK-<username>.md são rastreados pelo git (uma por dev)
+# legado — mantido pra não trackear acidentalmente o arquivo old
+.claude/tasks/CURRENT_TASK.md
+.claude/tasks/PAUSED/*
+.claude/tasks/DONE/*
+!.claude/tasks/CURRENT_TASK.md.example
+!.claude/tasks/PAUSED/.gitkeep
+!.claude/tasks/DONE/.gitkeep

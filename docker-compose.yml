@@ -1,0 +1,142 @@
+name: template
+
+# -----------------------------------------------------------------------------
+# Envs vêm exclusivamente de apps/api/.env e apps/web/.env.
+# Não existe .env na raiz — o deploy.sh passa --env-file pra ambos.
+# -----------------------------------------------------------------------------
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+    env_file:
+      - ./apps/api/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-template}
+    # Bind na loopback por padrão: o Docker faz bypass do UFW/iptables do host,
+    # então "5432:5432" (0.0.0.0) expõe o Postgres à internet numa VPS com IP
+    # público. Para acesso remoto real, sobrescreva POSTGRES_BIND_HOST=0.0.0.0.
+    ports:
+      - "${POSTGRES_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-template}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+# noeviction: o BullMQ EXIGE (allkeys-lru despeja chaves de job sob pressão de
+    # memória → jobs somem/corrompem). O cache convive porque toda entrada tem TTL
+    # (regra §4); sob memória alta, split de Redis cache×fila. Nunca allkeys-lru.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "${REDIS_MAXMEMORY:-512mb}", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "${REDIS_BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----- Object storage (opt-in: `docker compose --profile storage up -d`) -----
+  # MinIO = S3-compatível self-hosted. Use com STORAGE_DRIVER=s3 no apps/api/.env.
+  # A app alcança via `minio:9000` (rede interna); a URL ASSINADA aberta pelo
+  # browser usa STORAGE_ENDPOINT=http://localhost:9000 (host publicado).
+  minio:
+    image: minio/minio:latest
+    profiles: ["storage"]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_ACCESS_KEY:-minioadmin}
+    ports:
+      - "${MINIO_BIND_HOST:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+      - "${MINIO_BIND_HOST:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  # Cria o bucket PRIVADO uma vez (idempotente) e encerra.
+  minio-init:
+    image: minio/mc:latest
+    profiles: ["storage"]
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 "${STORAGE_ACCESS_KEY_ID:-minioadmin}" "${STORAGE_SECRET_ACCESS_KEY:-minioadmin}"; do
+          echo 'aguardando minio...'; sleep 2;
+        done
+        mc mb --ignore-existing "local/${STORAGE_BUCKET:-app-uploads}"
+        mc anonymous set none "local/${STORAGE_BUCKET:-app-uploads}"
+        echo 'bucket privado pronto'
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env
+    ports:
+      - "${API_PORT:-3333}:3333"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      - api
+
+  # ----- opcionais (descomente quando precisar) -----
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: apps-pgadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@apps.local
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #     PGADMIN_CONFIG_SERVER_MODE: "False"
+  #   ports:
+  #     - "5050:80"
+  #   depends_on: [postgres]
+
+  # redis-commander:
+  #   image: rediscommander/redis-commander:latest
+  #   container_name: apps-redis-commander
+  #   restart: unless-stopped
+  #   environment:
+  #     REDIS_HOSTS: local:redis:6379
+  #   ports:
+  #     - "8081:8081"
+  #   depends_on: [redis]
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

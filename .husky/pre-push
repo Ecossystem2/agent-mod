@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+set -e
+
+# ------------------------------------------------------------------------------
+# Gate funcional COMPLETO do monorepo, 1× antes do código sair da máquina.
+# ------------------------------------------------------------------------------
+# UMA invocação do turbo com as 4 tasks: ele monta o grafo e roda tudo que é
+# independente EM PARALELO. Rodar `pnpm lint` → `typecheck` → `test` → `build` em
+# série custava 226s; assim custa ~92s — mesmos checks, mesma cobertura, 59% mais
+# rápido. Se for mexer aqui, NÃO volte a serializar: medido em 2026-07-15.
+#
+# `--affected` foi testado e descartado: quando o pacote pesado é justamente o que
+# mudou (o caso comum), não há o que pular — 94s vs 92s. Complexidade sem ganho.
+#
+# `build` inclui o `tsc -b` real: o vitest transpila SEM type-check e nunca sobe o
+# main.ts, então só o build barra TS2532 & cia. antes do push (lição da auditoria).
+# Coverage (thresholds 100%) e o smoke de boot Docker ficam no CI.
+echo "→ turbo lint+typecheck+test+build (paralelo)"
+pnpm exec turbo run lint typecheck test build
+
+echo "✓ pre-push OK"

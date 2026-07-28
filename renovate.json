@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "Auto-merge patch updates for non-critical deps",
+      "matchUpdateTypes": ["patch"],
+      "matchPackagePatterns": ["*"],
+      "excludePackagePatterns": ["^@prisma/", "^prisma$", "better-auth", "bullmq", "express", "fastify"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Group all NestJS packages together",
+      "matchPackagePatterns": ["^@nestjs/"],
+      "groupName": "nestjs",
+      "automerge": false
+    },
+    {
+      "description": "Group all Prisma packages together",
+      "matchPackagePatterns": ["^@prisma/", "^prisma$"],
+      "groupName": "prisma",
+      "automerge": false
+    },
+    {
+      "description": "Security/auth deps: always manual review",
+      "matchPackageNames": ["better-auth", "bcryptjs", "jsonwebtoken"],
+      "automerge": false,
+      "labels": ["security"]
+    }
+  ],
+  "prConcurrentLimit": 5,
+  "branchPrefix": "renovate/",
+  "commitMessagePrefix": "chore(deps):"
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./",
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "prisma/**/*.ts",
+    "vitest.config.mts",
+    "vitest.config.e2e.mts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

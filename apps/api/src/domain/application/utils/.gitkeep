@@ -1,0 +1,2 @@
+# Funções puras compartilhadas entre use-cases (sem injeção, sem efeito colateral).
+# Se a função tem efeito colateral ou depende de infra → coloque em src/infra/ ou em um service.

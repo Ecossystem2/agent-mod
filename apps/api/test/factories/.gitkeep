@@ -1,0 +1,19 @@
+# Factories de teste vivem aqui, organizadas por subdomínio:
+#   test/factories/<subdomain>/make-<entity>.ts
+#
+# Padrão (camelCase, NÃO MakeX):
+#   import { faker } from '@faker-js/faker'
+#
+#   export function makeSubscription(
+#     override: Partial<SubscriptionProps> = {},
+#     id?: UniqueEntityID,
+#   ): Subscription {
+#     return Subscription.create(
+#       {
+#         status: 'active',
+#         renewsAt: faker.date.future(),
+#         ...override,
+#       },
+#       id,
+#     )
+#   }

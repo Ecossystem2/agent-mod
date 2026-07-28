@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.next
+.turbo
+coverage
+coverage-e2e
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+*.min.js
+*.min.css
+.claude/tasks/CURRENT_TASK.md
+.claude/tasks/PAUSED
+.claude/tasks/DONE

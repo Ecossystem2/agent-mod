@@ -1,0 +1,16 @@
+# In-memory repositories vivem aqui, organizados por subdomínio:
+#   test/repositories/<subdomain>/in-memory-<entity>-repository.ts
+#
+# Padrão: SUBCLASSE da abstract class do domínio (não classe avulsa).
+#   export class InMemorySubscriptionRepository extends SubscriptionRepository {
+#     items: Subscription[] = []
+#
+#     async findById(id: string) {
+#       return this.items.find((s) => s.id.toString() === id) ?? null
+#     }
+#     async create(sub: Subscription) {
+#       this.items.push(sub)
+#     }
+#   }
+#
+# Use nos use-case specs em vez de mocks Vitest.

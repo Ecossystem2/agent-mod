@@ -1,0 +1,68 @@
+name: apps-shared
+
+# =============================================================================
+# docker-compose.shared.yml — infra compartilhada entre as cores blue/green.
+#
+# Sobe Postgres + Redis UMA vez. As cores (blue/green) sobem só api+web e se
+# conectam aqui pela rede externa `apps-net`.
+#
+# Banco é compartilhado → migrations DEVEM ser backward-compatible
+# (expand/contract). Ver docs/infra/deploy.md.
+#
+# Uso (prod, na VPS):
+#   docker compose --env-file apps/api/.env -f docker-compose.shared.yml up -d
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: apps-postgres
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-template}
+    # Bind na loopback: Docker faz bypass do firewall do host; "5432:5432" (0.0.0.0)
+    # expõe o Postgres à internet na VPS. As cores blue/green alcançam o banco pela
+    # rede `apps-net` (nome de serviço), não pela porta publicada. Remoto real:
+    # POSTGRES_BIND_HOST=0.0.0.0.
+    ports:
+      - "${POSTGRES_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - apps-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-template}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    container_name: apps-redis
+    restart: unless-stopped
+# noeviction: o BullMQ EXIGE (allkeys-lru despeja chaves de job → jobs somem).
+    # Cache convive via TTL (regra §4). Loopback pelo mesmo motivo do Postgres.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "${REDIS_BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - apps-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  apps-net:
+    name: apps-net

@@ -1,0 +1,28 @@
+# =============================================================================
+# restic-backup.service — unidade systemd que dispara o backup-restic.sh.
+#
+# Instalação (na VPS):
+#   sudo cp infra/backup/restic-backup.service /etc/systemd/system/
+#   sudo cp infra/backup/restic-backup.timer   /etc/systemd/system/
+#   # ajuste WorkingDirectory/ExecStart pro caminho real do repo na VPS
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now restic-backup.timer
+#
+# Teste manual: sudo systemctl start restic-backup.service
+#               journalctl -u restic-backup.service -f
+# =============================================================================
+[Unit]
+Description=Backup Restic (Postgres via docker exec + uploads) para Backblaze B2
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Ajuste para o caminho real do repositório clonado na VPS.
+WorkingDirectory=/opt/app
+ExecStart=/usr/bin/env bash /opt/app/infra/backup/backup-restic.sh
+# Credenciais vêm do próprio script (b2-credentials.env). Mantemos timeout
+# generoso pra dumps grandes; o lock interno evita concorrência com o pré-deploy.
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle
