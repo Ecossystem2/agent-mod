@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "bullmq": "^5.34.0",
-    "ioredis": "^5.4.2"
+    "bullmq": "^6.3.15",
+    "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "@apps/eslint-config": "workspace:*",

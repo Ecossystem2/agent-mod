@@ -15,8 +15,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "pino": "^9.6.0",
-    "pino-pretty": "^13.0.0"
+    "pino": "^10.4.0",
+    "pino-pretty": "^13.2.0"
   },
   "devDependencies": {
     "@apps/eslint-config": "workspace:*",
