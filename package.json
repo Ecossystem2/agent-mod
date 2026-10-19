@@ -30,10 +30,10 @@
   "devDependencies": {
     "@apps/eslint-config": "workspace:*",
     "@apps/typescript-config": "workspace:*",
-    "eslint": "^9.18.0",
-    "prettier": "^3.4.2",
-    "turbo": "^2.9.16",
-    "typescript": "^5.7.3"
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.8",
+    "typescript": "^7.0.2"
   },
   "pnpm": {
     "overrides": {
